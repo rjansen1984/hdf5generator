@@ -193,8 +193,8 @@ def delete_groups(hdf_file, groups_to_delete):
 
 if __name__ == "__main__":
     options = input(
-        "1=Create HDF5 file 2=Find datasets 3=Get attributes from HDF5 file 4=Delete datasets: ")
-    out_file = input("Enter HDF5 filename: ")
+        "1 = Create HDF5 file; 2 = Find datasets; 3 = Get attributes from HDF5 file; 4 = Delete groups: ")
+    out_file = input("Enter HDF5 output path: ")
     if int(options) == 1:
         groups = []
         input_files = input("Enter file paths (seperated by a space): ")
