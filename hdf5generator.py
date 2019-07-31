@@ -59,10 +59,9 @@ def find_datasets(name, node):
         node: The group node from h5py visititems.
     """
     if isinstance(node, h5py.Dataset):
-        print(node)
-        # write_dataset(node[:][0], name.split('/')[-2], name.split('/')[-1])
+        write_dataset(node[:][0], name.split('/')[-2], name.split('/')[-1])
     else:
-        print(node)
+        get_groups(name)
 
 
 def get_groups(name):
@@ -78,6 +77,7 @@ def get_groups(name):
     isa_structure = ["Project", "Investigation", "Study", "Assay"]
     groupname = name.split('/')[-1]
     groups[isa_structure[len(name.split('/'))-1]] = groupname
+    print(groups)
 
 
 def write_dataset(dataset, folder, out_file):
@@ -95,10 +95,10 @@ def write_dataset(dataset, folder, out_file):
 
 
 def get_attr(hdf_file):
-    """Print all attributes.
+    """Print all attributes from input HDF5 file.
 
     Arguments:
-        hdf_file {[type]} -- [description]
+        hdf_file: HDF5 file to get the attributes from.
     """
     with h5py.File(hdf_file, 'r') as f:
         print(hdf_file, "has the following attributes:")
@@ -111,30 +111,31 @@ def get_attr(hdf_file):
             print(att)
 
 
-def delete_dataset(input, datasets_to_delete):
-    with h5py.File(input,  "a") as f:
+def delete_dataset(hdf_file, datasets_to_delete):
+    """Delete specific datasets based on user input.
+    
+    Arguments:
+        hdf_file: The HDF5 file.
+        datasets_to_delete: A list of datasets to delete from the HDF5 file.
+    """
+    with h5py.File(hdf_file,  "a") as f:
         for datasetname in datasets_to_delete:
             del f[datasetname]
 
 
 if __name__ == "__main__":
-    in_files = [
-        'D:/Nanopore/Rick/results/RB01_Meta/assembly/RB01/assembly.fasta',
-        'D:/Nanopore/Rick/results/RB01_Meta/assembly/RB01/assembly_graph.gfa',
-        'D:/Nanopore/Rick/results/RB01_Meta/assembly/RB01/assembly_info.txt',
-        'D:/Nanopore/Rick/results/RB01_Meta/qc/RB01/RB01HistogramReadlength.png'
-    ]
-    groups = [
-        '/Nanopore/PRIMUL/RB/RB01/'
-    ]
     options = input(
         "Please enter the number of the option you want to use. 1=Create HDF5 file 2=Find datasets 3=Get attributes from HDF5 file 4=Delete datasets: ")
     out_file = input("Enter HDF5 filename: ")
     if int(options) == 1:
+        input_files = input("Enter file paths (seperated by a space): ")
+        input_groups = input("Enter groups (seperated by a space): ")
+        in_files = input_files.split(' ')
+        groups = input_groups.split(' ')
         attributes = {}
         while True:
             attr = input(
-                "Enter an attributes i.e. EDAM http://edamontology.org/topic_3168,http://edamontology.org/format_1929: ")
+                "Enter attributes i.e. EDAM http://edamontology.org/topic_3168,http://edamontology.org/format_1929: ")
             if "," in attr:
                 attributes[attr.split(' ')[0]] = attr.split(' ')[1].split(',')
             elif attr == '':
