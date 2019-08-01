@@ -1,4 +1,5 @@
 from h5py import Dataset
+from PIL import Image
 
 import h5py
 import numpy as np
@@ -21,24 +22,31 @@ def write_func(in_files, out_file, group):
         RuntimeError: An error occured while generating the HDF5 file.
     """
     data_file = h5py.File(out_file, 'a')
+    image_extensions = ['jpg', 'jpeg', 'png', 'bmp', 'tiff']
     try:
         for group in groups:
             for in_file in in_files:
                 if group.split('/')[-2].lower() in in_file.lower():
-                    try:
-                        with open(in_file) as ocf:
-                            data = ocf.read()
-                            str_type = h5py.special_dtype(vlen=str)
-                            dset = data_file.create_dataset(
-                                group + in_file.split('/')[-1],
-                                data=data, shape=(1,),
-                                dtype=str_type
-                            )
+                    if in_file.split('.')[-1] not in image_extensions:
+                        try:
+                            with open(in_file) as ocf:
+                                data = ocf.read()
+                                str_type = h5py.special_dtype(vlen=str)
+                                dset = data_file.create_dataset(
+                                    group + in_file.split('/')[-1],
+                                    data=data, shape=(1,),
+                                    dtype=str_type
+                                )
+                            attributes = generate_attributes_to_add(group + in_file.split('/')[-1])
+                            for k,v in attributes.items():
+                                dset.attrs[k] = v
+                        except FileNotFoundError:
+                            print(in_file, "not found")
+                    else:
+                        dset = image_to_hdf5(in_file, data_file, group)
                         attributes = generate_attributes_to_add(group + in_file.split('/')[-1])
                         for k,v in attributes.items():
                             dset.attrs[k] = v
-                    except FileNotFoundError:
-                        print(in_file, "not found")
                 else:
                     pass
     except RuntimeError:
@@ -50,6 +58,10 @@ def generate_attributes_to_add(group_name):
     
     Arguments:
         group_name: The name of the group in which the dataset is located.
+
+    Returns:
+        Dictionary of attributes. Key is the ontology and 
+        the values are the links.
     """
     attributes = {}
     while True:
@@ -102,9 +114,10 @@ def find_datasets(name, node):
         node: The group node from h5py visititems.
     """
     if isinstance(node, h5py.Dataset):
-        write_dataset(node[:][0], name.split('/')[-2], name.split('/')[-1])
+        dataset = node[:][0]
+        write_dataset(dataset, name.split('/')[-2], name.split('/')[-1])
     else:
-        get_groups(name)
+        pass
 
 
 def get_groups(name):
@@ -132,8 +145,12 @@ def write_dataset(dataset, folder, out_file):
     """
     if not os.path.isdir(folder):
         os.makedirs(folder)
-    with open(folder + '/' + out_file, 'w') as writefile:
-        writefile.write(dataset)
+    try:
+        with open(folder + '/' + out_file, 'w') as writefile:
+            writefile.write(dataset)
+    except TypeError:
+        im = Image.fromarray(dataset.astype('uint8'))
+        im.save(folder + '/' + out_file, "PNG")
 
 
 def h5py_dataset_iterator(fc, prefix=''):
@@ -189,6 +206,27 @@ def delete_groups(hdf_file, groups_to_delete):
         for group_name in groups_to_delete:
             del f[group_name]
             print(group_name, "deleted!")
+
+
+def image_to_hdf5(filename, f, group):
+    """Generate an HDF5 dataset from an image.
+    
+    Arguments:
+        filename: Filename of the image.
+        f: HDF5 file.
+        group: HDF5 group name.
+    
+    Returns:
+        HDF5 dataset in numpy.ndarray from the image.
+    """
+    img = Image.open(filename)
+    image = np.array(img.getdata()).reshape(img.size[1], img.size[0], -1)
+    data = np.array(image)
+    dset = f.create_dataset(group + filename.split('/')[-1], shape=(4, img.size[1], img.size[0], 4))
+    dset[0] = data
+    im = Image.fromarray(dset[0].astype('uint8'))
+    im.save(filename)
+    return dset
 
 
 if __name__ == "__main__":
