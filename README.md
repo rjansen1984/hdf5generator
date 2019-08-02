@@ -12,13 +12,14 @@
 
 * Python 3.6 or higher
 * h5py 2.9.0
+* Pillow 5.3.0
 
 <hr>
 
 ## <a name="installation"></a>Installation
 
 ```bash
-pip install h5py
+pip install h5py Pillow
 git clone https://github.com/rjansen1984/hdf5generator
 ```
 
