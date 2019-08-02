@@ -4,6 +4,7 @@ from PIL import Image
 import h5py
 import numpy as np
 import os
+import ols_client
 
 
 def write_func(in_files, out_file, group):
@@ -31,12 +32,12 @@ def write_func(in_files, out_file, group):
                         try:
                             with open(in_file) as ocf:
                                 data = ocf.read()
-                                str_type = h5py.special_dtype(vlen=str)
-                                dset = data_file.create_dataset(
-                                    group + in_file.split('/')[-1],
-                                    data=data, shape=(1,),
-                                    dtype=str_type
-                                )
+                            str_type = h5py.special_dtype(vlen=str)
+                            dset = data_file.create_dataset(
+                                group + in_file.split('/')[-1],
+                                data=data, shape=(1,),
+                                dtype=str_type
+                            )
                             attributes = generate_attributes_to_add(group + in_file.split('/')[-1])
                             for k,v in attributes.items():
                                 dset.attrs[k] = v
@@ -54,27 +55,40 @@ def write_func(in_files, out_file, group):
 
 
 def generate_attributes_to_add(group_name):
-    """Create a list of attributes to add to a dataset.
+    """ Search ontology lookup service and create a list of attributes 
+    to add to a dataset. At the moment the information stored from OLS
+    is the name, iri and description.
     
     Arguments:
         group_name: The name of the group in which the dataset is located.
 
     Returns:
-        Dictionary of attributes. Key is the ontology and 
-        the values are the links.
+        Dictionary of attributes. Key is the name and 
+        the values are the description and iri.
     """
     attributes = {}
     while True:
         print()
         print("Enter attributes for " + group_name)
-        print("Please use the following format --> OntologyName OntologyLink1,OntologyLink2")
+        print("Please enter a search term")
         attr = input("")
-        if "," in attr:
-            attributes[attr.split(' ')[0]] = attr.split(' ')[1].split(',')
-        elif attr == '':
+        ontolist = ontologies(attr)
+        print("ID -- Name -- Description -- IRI")
+        print()
+        for onto in enumerate(ontolist):
+            print(onto[0], "--", onto[1][0], "--", onto[1][1], "--", onto[1][2])
+        select_onto = input("Select an ontology description(s) to add (comma seperated): ")
+        if "," in select_onto:
+            added_onto_list = []
+            for select in select_onto.split(','):
+                added_onto = ontolist[int(select)]
+                added_onto_list.append(added_onto[1] + " -- " + added_onto[2])
+            attributes[added_onto[0]] = [added_onto_list]
+        elif select_onto == '':
             pass
         else:
-            attributes[attr.split(' ')[0]] = [attr.split(' ')[1]]
+            added_onto = ontolist[int(select_onto)]
+            attributes[added_onto[0]] = [added_onto[1] + " -- " + added_onto[2]]
         continue_attr = input("Add another attribute? (Y/N): ")
         if continue_attr == "y" or continue_attr == "Y":
             True
@@ -227,6 +241,34 @@ def image_to_hdf5(filename, f, group):
     im = Image.fromarray(dset[0].astype('uint8'))
     im.save(filename)
     return dset
+
+
+def ontologies(tag):
+    """Search for ontologies based on user input.
+    
+    Arguments:
+        tag: User input to find an ontology
+
+    Returns:
+        Ontology list with label, iri and description.
+    """
+    ols = ols_client.client.OlsClient()
+    foundontologies = {}
+    ontolist = []
+    searchonto = ols.search(str(tag))
+    for i in range(0, len(searchonto['response']['docs'])):
+        try:
+            iri = searchonto['response']['docs'][i]['iri']
+            label = searchonto['response']['docs'][i]['label'].lower()
+            description = searchonto['response']['docs'][i]['description'][0]
+            if iri not in ontolist:
+                if tag in label:
+                    if iri not in ontolist:
+                        foundontologies[label] = iri
+                        ontolist.append((label, description, iri))
+        except KeyError:
+            pass
+    return ontolist
 
 
 if __name__ == "__main__":
