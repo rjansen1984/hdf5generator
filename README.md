@@ -13,13 +13,14 @@
 * Python 3.6 or higher
 * h5py 2.9.0
 * Pillow 5.3.0
+* ols-client 0.0.9
 
 <hr>
 
 ## <a name="installation"></a>Installation
 
 ```bash
-pip install h5py Pillow
+pip install h5py Pillow ols-client
 git clone https://github.com/rjansen1984/hdf5generator
 ```
 
