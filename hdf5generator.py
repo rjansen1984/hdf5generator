@@ -82,13 +82,13 @@ def generate_attributes_to_add(group_name):
             added_onto_list = []
             for select in select_onto.split(','):
                 added_onto = ontolist[int(select)]
-                added_onto_list.append(added_onto[1] + " -- " + added_onto[2])
+                added_onto_list.append(added_onto[1] + "--" + added_onto[2])
             attributes[added_onto[0]] = [added_onto_list]
         elif select_onto == '':
             pass
         else:
             added_onto = ontolist[int(select_onto)]
-            attributes[added_onto[0]] = [added_onto[1] + " -- " + added_onto[2]]
+            attributes[added_onto[0]] = [added_onto[1] + "--" + added_onto[2]]
         continue_attr = input("Add another attribute? (Y/N): ")
         if continue_attr == "y" or continue_attr == "Y":
             True
@@ -201,10 +201,8 @@ def get_attr(hdf_file):
             print(dataset, "has the following attributes:")
             all_attr = list(f[dataset].attrs)
             for attr in all_attr:
-                print(attr + ":")
-                attrlist = f[dataset].attrs.get(attr)
-            for att in attrlist:
-                print(att)
+                attr_value = str(f[dataset].attrs.get(attr)[0])
+                print(attr + ": " + attr_value.split("--")[1])
             print()
             print()
 
