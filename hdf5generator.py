@@ -1,10 +1,14 @@
 from h5py import Dataset
 from PIL import Image
+from rdflib import Graph, URIRef, BNode, Literal, Namespace
+from rdflib.namespace import FOAF, RDF
 
 import h5py
 import numpy as np
 import os
 import ols_client
+import SPARQLWrapper
+import rdflib.namespace
 
 
 def write_func(in_files, out_file, group):
@@ -27,29 +31,26 @@ def write_func(in_files, out_file, group):
     try:
         for group in groups:
             for in_file in in_files:
-                if group.split('/')[-2].lower() in in_file.lower():
-                    if in_file.split('.')[-1] not in image_extensions:
-                        try:
-                            with open(in_file) as ocf:
-                                data = ocf.read()
-                            str_type = h5py.special_dtype(vlen=str)
-                            dset = data_file.create_dataset(
-                                group + in_file.split('/')[-1],
-                                data=data, shape=(1,),
-                                dtype=str_type
-                            )
-                            attributes = generate_attributes_to_add(group + in_file.split('/')[-1])
-                            for k,v in attributes.items():
-                                dset.attrs[k] = v
-                        except FileNotFoundError:
-                            print(in_file, "not found")
-                    else:
-                        dset = image_to_hdf5(in_file, data_file, group)
+                if in_file.split('.')[-1] not in image_extensions:
+                    try:
+                        with open(in_file) as ocf:
+                            data = ocf.read()
+                        str_type = h5py.special_dtype(vlen=str)
+                        dset = data_file.create_dataset(
+                            group + in_file.split('/')[-1],
+                            data=data, shape=(1,),
+                            dtype=str_type
+                        )
                         attributes = generate_attributes_to_add(group + in_file.split('/')[-1])
                         for k,v in attributes.items():
                             dset.attrs[k] = v
+                    except FileNotFoundError:
+                        print(in_file, "not found")
                 else:
-                    pass
+                    dset = image_to_hdf5(in_file, data_file, group)
+                    attributes = generate_attributes_to_add(group + in_file.split('/')[-1])
+                    for k,v in attributes.items():
+                        dset.attrs[k] = v
     except RuntimeError:
         pass
 
@@ -70,6 +71,8 @@ def generate_attributes_to_add(group_name):
     while True:
         print()
         print("Enter attributes for " + group_name)
+        print("Enter attributes name")
+        attr_name = input("")
         print("Please enter a search term")
         attr = input("")
         ontolist = ontologies(attr)
@@ -83,12 +86,12 @@ def generate_attributes_to_add(group_name):
             for select in select_onto.split(','):
                 added_onto = ontolist[int(select)]
                 added_onto_list.append(added_onto[1] + "--" + added_onto[2])
-            attributes[added_onto[0]] = [added_onto_list]
+            attributes[attr_name] = [added_onto_list]
         elif select_onto == '':
             pass
         else:
             added_onto = ontolist[int(select_onto)]
-            attributes[added_onto[0]] = [added_onto[1] + "--" + added_onto[2]]
+            attributes[attr_name] = [added_onto[1] + "--" + added_onto[2]]
         continue_attr = input("Add another attribute? (Y/N): ")
         if continue_attr == "y" or continue_attr == "Y":
             True
@@ -207,6 +210,31 @@ def get_attr(hdf_file):
             print()
 
 
+def generate_rdf(hdf_file):
+    """Generate an RDF file based on an HDF5 file.
+    
+    Arguments:
+        hdf_file: HDF5 file to generate an RDF from.
+    """
+    datasets = []
+    g = Graph()
+    c = 0
+    print(hdf_file.split('/')[-1])
+    with h5py.File(hdf_file, 'r') as f:
+        for (path, dummydset) in h5py_dataset_iterator(f):
+            datasets.append(path)
+        for dataset in datasets:
+            all_attr = list(f[dataset].attrs)
+            for attr in all_attr:
+                f[dataset].attrs.get(attr)
+                predicate = URIRef("http://example.org/hdf5/"+ attr.replace(" ",  "-"))
+                attr_value = f[dataset].attrs.get(attr)[0].split("--")
+                g.add((URIRef(dataset), predicate, Literal(attr_value[1])))
+                c += 1
+    g.serialize(destination=hdf_file.split('/')[-1] + ".rdf", format="turtle")
+    pass
+
+
 def delete_groups(hdf_file, groups_to_delete):
     """Delete specific datasets based on user input.
     
@@ -271,11 +299,11 @@ def ontologies(tag):
 
 if __name__ == "__main__":
     options = input(
-        "1 = Create HDF5 file; 2 = Find datasets; 3 = Get attributes from HDF5 file; 4 = Delete groups: ")
+        "1 = Create HDF5 file; 2 = Find datasets; 3 = Get attributes from HDF5 file; 4 = Delete groups; 5 = Generate RDF: ")
     out_file = input("Enter HDF5 output path: ")
     if int(options) == 1:
         groups = []
-        input_files = input("Enter file paths (seperated by a space): ")
+        input_files = input("Enter file paths (seperated by a space): ").replace('\\', '/')
         input_groups = input("Enter groups (seperated by a space): ")
         in_files = input_files.split(' ')
         groups = input_groups.split(' ')
@@ -288,3 +316,5 @@ if __name__ == "__main__":
     elif int(options) == 4:
         groups_to_delete = generate_groups_to_delete()
         delete_groups(out_file, groups_to_delete)
+    elif int(options) == 5:
+        generate_rdf(out_file)
