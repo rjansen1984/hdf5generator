@@ -276,6 +276,142 @@ def get_attr(hdf_file):
             print()
 
 
+def get_namespaces(g):
+    """Creates RDF namespaces and binds them to the graph.
+    
+    Arguments:
+        g: Triple store graph
+
+    Returns:
+        List with the used RDF namespaces.
+    """
+    DCTERMS = Namespace('http://purl.org/dc/terms/')
+    HDF2RDF = Namespace("http://example.org/hdf2rdf/")
+    ISA = Namespace('http://purl.org/isaterms/')
+    VOID = Namespace('http://rdfs.org/ns/void#')
+    DCAT = Namespace('http://www.w3.org/ns/dcat#')
+    RDF = Namespace('http://www.w3.org/1999/02/22-rdf-syntax-ns#')
+    g.bind('dcterms', DCTERMS)
+    g.bind('hdf2rdf', HDF2RDF)
+    g.bind('isa', ISA)
+    g.bind('void', VOID)
+    g.bind('dcat', DCAT)
+    g.bind('rdf', RDF)
+    
+    return [DCTERMS, HDF2RDF, ISA, VOID, DCAT, RDF]
+
+
+def add_isa_triples(g, hdf_file, isa_title, isa_labels, isa_tab, count):
+    """Adds the ISA triples to the graph.
+    
+    Arguments:
+        g: Triple store graph.
+        hdf_file: The HDF file.
+        isa_title: The ISA title.
+        Either the investigation, study or assay title)
+        isa_labels: The label that belongs to the title.
+        isa_tab: The ISA structure as a list.
+        count: Number that is linked to the ISA catalog.
+    """
+    namespaces = get_namespaces(g)
+    if count == 1:
+        g.add(
+            (
+                URIRef(hdf_file + "#" + isa_title),
+                URIRef(namespaces[-1] + 'type'),
+                Literal(isa_labels.get(count))
+            )
+        )
+        g.add(
+            (
+                URIRef(hdf_file + "#" + isa_title),
+                URIRef(namespaces[0] + 'hasPart'),
+                Literal(hdf_file + "#" + isa_tab[count + 1])
+            )
+        )
+    else:
+        g.add(
+            (
+                URIRef(hdf_file + "#" + isa_title),
+                URIRef(namespaces[-1] + 'type'),
+                URIRef(namespaces[2] + isa_labels.get(count))
+            )
+        )
+        g.add(
+            (
+                URIRef(hdf_file + "#" + isa_title),
+                URIRef(namespaces[0] + 'isPartOf'),
+                Literal(hdf_file + "#" + isa_tab[count - 1])
+            )
+        )
+        try:
+            g.add(
+                (
+                    URIRef(hdf_file + "#" + isa_title),
+                    URIRef(namespaces[0] + 'hasPart'),
+                    Literal(hdf_file + "#" + isa_tab[count + 1])
+                )
+            )
+        except IndexError:
+            pass
+
+
+def add_hdf_trples(g, hdf_file, dataset, catalog, isa_tab, identifier):
+    """Adds the triples to the graph based on the attributes in the HDF.
+    
+    Arguments:
+        g: Triple store graph
+        hdf_file: The HDF file.
+        dataset: The name of the dataset.
+        catalog: The complete HDF structure linked to the dataset.
+        isa_tab: The ISA structure as a list.
+        identifier {[type]} -- [description]
+    """
+    namespaces = get_namespaces(g)
+    g.add(
+        (
+            URIRef(hdf_file + "#" + dataset),
+            URIRef(namespaces[0] + 'isPartOf'),
+            Literal(catalog)
+        )
+    )
+    g.add(
+        (
+            URIRef(hdf_file + "#" + dataset),
+            URIRef(namespaces[-1] + 'type'),
+            URIRef(namespaces[4] + 'Dataset')
+        )
+    )
+    g.add(
+        (
+            URIRef(hdf_file + "#" + dataset),
+            URIRef(namespaces[4] + 'dataset'),
+            Literal(isa_tab[-1])
+        )
+    )
+    g.add(
+        (
+            URIRef(hdf_file + "#" + dataset),
+            URIRef(namespaces[4] + 'title'),
+            Literal(isa_tab[-1].split('.')[0])
+        )
+    )
+    g.add(
+        (
+            URIRef(hdf_file + "#" + dataset),
+            URIRef(namespaces[4] + 'identifier'),
+            Literal(identifier)
+        )
+    )
+    g.add(
+        (
+            URIRef(hdf_file + "#" + dataset),
+            URIRef(namespaces[0] + 'format'),
+            Literal(isa_tab[-1].split('.')[-1])
+        )
+    )
+
+
 def generate_rdf(hdf_file):
     """Generate an RDF file based on an HDF5 file.
 
@@ -292,18 +428,7 @@ def generate_rdf(hdf_file):
     datasets = []
     g = Graph().parse(rdf_file, format='turtle')
     c = 0
-    DCTERMS = Namespace('http://purl.org/dc/terms/')
-    HDF2RDF = Namespace("http://example.org/hdf2rdf/")
-    ISA = Namespace('http://purl.org/isaterms/')
-    VOID = Namespace('http://rdfs.org/ns/void#')
-    DCAT = Namespace('http://www.w3.org/ns/dcat#')
-    RDF = Namespace('http://www.w3.org/1999/02/22-rdf-syntax-ns#')
-    g.bind('dcterms', DCTERMS)
-    g.bind('hdf2rdf', HDF2RDF)
-    g.bind('isa', ISA)
-    g.bind('void', VOID)
-    g.bind('dcat', DCAT)
-    g.bind('rdf', RDF)
+    namespaces = get_namespaces(g)
     with h5py.File(hdf_file, 'r') as f:
         for (path, dummydset) in h5py_dataset_iterator(f):
             datasets.append(path)
@@ -314,59 +439,27 @@ def generate_rdf(hdf_file):
                     if rdf_file in contents:
                         print(dataset, "is already in RDF")
                     else:
+                        count = 0
                         uid_str = uuid.uuid4().urn
                         identifier = uid_str[9:]
                         isa_tab = dataset.split('/')
                         catalog = "/"
+                        isa_labels = {
+                            1: "project",
+                            2: "investigation",
+                            3: "study",
+                            4: "assay"
+                        }
                         for cat in isa_tab[1:-1]:
+                            count += 1
+                            add_isa_triples(g, hdf_file, cat, isa_labels, isa_tab, count)
                             catalog += (cat + "/")
                         all_attr = list(f[dataset].attrs)
-                        g.add(
-                            (
-                                URIRef(hdf_file + "#" + dataset),
-                                URIRef(DCTERMS + 'isPartOf'),
-                                Literal(catalog)
-                            )
-                        )
-                        g.add(
-                            (
-                                URIRef(hdf_file + "#" + dataset),
-                                URIRef(RDF + 'type'),
-                                URIRef(DCAT + 'Dataset')
-                            )
-                        )
-                        g.add(
-                            (
-                                URIRef(hdf_file + "#" + dataset),
-                                URIRef(DCAT + 'dataset'),
-                                Literal(isa_tab[-1])
-                            )
-                        )
-                        g.add(
-                            (
-                                URIRef(hdf_file + "#" + dataset),
-                                URIRef(DCAT + 'title'),
-                                Literal(isa_tab[-1].split('.')[0])
-                            )
-                        )
-                        g.add(
-                            (
-                                URIRef(hdf_file + "#" + dataset),
-                                URIRef(DCAT + 'identifier'),
-                                Literal(identifier)
-                            )
-                        )
-                        g.add(
-                            (
-                                URIRef(hdf_file + "#" + dataset),
-                                URIRef(DCTERMS + 'format'),
-                                Literal(isa_tab[-1].split('.')[-1])
-                            )
-                        )
+                        add_hdf_trples(g, hdf_file, dataset, catalog, isa_tab, identifier)
                         for attr in all_attr:
                             f[dataset].attrs.get(attr)
                             predicate = URIRef(
-                                HDF2RDF + attr.replace(" ",  "-"))
+                                namespaces[1] + attr.replace(" ",  "-"))
                             try:
                                 attr_value = f[dataset].attrs.get(attr)
                             except AttributeError:
